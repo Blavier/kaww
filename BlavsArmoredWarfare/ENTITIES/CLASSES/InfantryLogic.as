@@ -367,9 +367,9 @@ void ManageGun( CBlob@ this, ArcherInfo@ archer, RunnerMoveVars@ moveVars, Infan
 				isReloading = true;
 				this.set_bool("isReloading", true);
 	
-				CBitStream params; // sync to server
-				if (isClient())
+				if (responsible)
 				{
+					CBitStream params; // sync to all
 					params.write_s8(charge_time);
 					this.SendCommand(this.getCommandID("sync_reload_to_server"), params);
 				}
