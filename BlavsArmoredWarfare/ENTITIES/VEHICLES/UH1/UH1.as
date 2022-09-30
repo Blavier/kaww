@@ -1,4 +1,5 @@
 #include "WarfareGlobal.as"
+#include "ComputerCommon.as"
 #include "Hitters.as";
 #include "Explosion.as";
 
@@ -52,21 +53,6 @@ void onInit(CBlob@ this)
 			AttachmentPoint@ ap = aps[i];
 			ap.offsetZ = 10.0f;
 			ap.SetKeysToTake(key_action1 | key_action2 | key_action3);
-		}
-	}
-
-	//add javlauncher
-	if (getNet().isServer())
-	{
-		CBlob@ launcher = server_CreateBlob("launcher_javelin");	
-
-		if (launcher !is null)
-		{
-			launcher.server_setTeamNum(this.getTeamNum());
-			this.server_AttachTo(launcher, "JAVLAUNCHER");
-			this.set_u16("launcherid", launcher.getNetworkID());
-
-			launcher.SetFacingLeft(this.isFacingLeft());
 		}
 	}
 
@@ -165,168 +151,161 @@ bool canBePickedUp(CBlob@ this, CBlob@ byBlob)
 
 void onTick(CBlob@ this)
 {	
-	if (this !is null)
+	Vec2f thisPos = this.getPosition();
+	Vec2f thisVel = this.getVelocity();
+	if (getGameTime() >= this.get_u32("next_shoot"))
 	{
-		if (getGameTime() >= this.get_u32("next_shoot"))
-		{
-			this.Untag("no_more_shooting");
-			this.Untag("no_more_proj");
-		}
-		if (this.getVelocity().x > 6.25f || this.getVelocity().x < -6.25f) this.setVelocity(Vec2f(this.getOldVelocity().x, this.getVelocity().y));
+		this.Untag("no_more_shooting");
+		this.Untag("no_more_proj");
+	}
+	if (thisVel.x > 6.25f || thisVel.x < -6.25f) this.setVelocity(Vec2f(this.getOldVelocity().x, this.getVelocity().y));
 
-		if (this.getPosition().y < 70.0f && this.getVelocity().y < 0.5f)
-		{
-			//this.setVelocity(Vec2f(this.getVelocity().x, this.getVelocity().y*0.16f));
-			this.AddForce(Vec2f(0, 220.0f));
-		}
+	if (thisPos.y < 70.0f && thisVel.y < 0.5f)
+	{
+		//this.setVelocity(Vec2f(thisVel.x, thisVel.y*0.16f));
+		this.AddForce(Vec2f(0, 220.0f));
+	}
 
-		bool has_ammo = false;
+	CSprite@ sprite = this.getSprite();
+	CShape@ shape = this.getShape();
+	Vec2f currentVel = thisVel;
+	f32 angle = shape.getAngleDegrees();
 
-		AttachmentPoint@ ap = this.getAttachments().getAttachmentPointByName("JAVLAUNCHER");
-		if (this.get_u32("next_shoot") < getGameTime() && ap !is null)
+	const bool flip = this.isFacingLeft();
+
+	Vec2f newForce = Vec2f(0, 0);
+
+	AttachmentPoint@[] aps;
+	this.getAttachmentPoints(@aps);
+	
+	CSpriteLayer@ blade = sprite.getSpriteLayer("blade");
+	CSpriteLayer@ tailrotor = sprite.getSpriteLayer("tailrotor");
+	for(int a = 0; a < aps.length; a++)
+	{
+		AttachmentPoint@ ap = aps[a];
+		if (ap !is null)
 		{
-			CBlob@ launcher = ap.getOccupied();
-			if (launcher !is null && launcher.hasTag("dead"))
+			CBlob@ hooman = ap.getOccupied();
+			if (hooman !is null)
 			{
-				CInventory@ inv = this.getInventory();
-				if (inv !is null && inv.getItem("mat_heatwarhead") !is null)
+				if (ap.name == "DRIVER")
 				{
-					has_ammo = true;
-					if (isServer()) inv.server_RemoveItems("mat_heatwarhead", 1);
-					launcher.Untag("dead");
-					this.set_u32("next_shoot", getGameTime()+30);
-				}
-			}
-		}
+					const bool pressed_w  = ap.isKeyPressed(key_up);
+					const bool pressed_s  = ap.isKeyPressed(key_down);
+					const bool pressed_a  = ap.isKeyPressed(key_left);
+					const bool pressed_d  = ap.isKeyPressed(key_right);
+					const bool pressed_c  = ap.isKeyPressed(key_pickup);
+					const bool pressed_m1 = ap.isKeyPressed(key_action1);
+					const bool pressed_m2 = ap.isKeyPressed(key_action2);
 
-		this.set_bool("has_ammo", has_ammo);
-
-		CSprite@ sprite = this.getSprite();
-		CShape@ shape = this.getShape();
-		Vec2f currentVel = this.getVelocity();
-		f32 angle = shape.getAngleDegrees();
-
-		const bool flip = this.isFacingLeft();
-
-		Vec2f newForce = Vec2f(0, 0);
-
-		AttachmentPoint@[] aps;
-		this.getAttachmentPoints(@aps);
-		
-		CSpriteLayer@ blade = sprite.getSpriteLayer("blade");
-		CSpriteLayer@ tailrotor = sprite.getSpriteLayer("tailrotor");
-		for(int a = 0; a < aps.length; a++)
-		{
-			AttachmentPoint@ ap = aps[a];
-			if (ap !is null)
-			{
-				CBlob@ hooman = ap.getOccupied();
-				if (hooman !is null)
-				{
-					if (ap.name == "DRIVER")
+					// shoot
+					if (hooman.isMyPlayer())
 					{
-						const bool pressed_w  = ap.isKeyPressed(key_up);
-						const bool pressed_s  = ap.isKeyPressed(key_down);
-						const bool pressed_a  = ap.isKeyPressed(key_left);
-						const bool pressed_d  = ap.isKeyPressed(key_right);
-						const bool pressed_c  = ap.isKeyPressed(key_pickup);
-						const bool pressed_m1 = ap.isKeyPressed(key_action1);
-						const bool pressed_m2 = ap.isKeyPressed(key_action2);
+						float rot = this.isFacingLeft() ? -1.0f : 1.0f;
+						Vec2f barrelPos = thisPos + Vec2f(30.0f*rot, 0).RotateBy(angle);
+						Vec2f ownerAimpos = ap.getAimPos() + Vec2f(2.0f, 2.0f);
+						Vec2f aimVec = ownerAimpos - barrelPos;
+						Vec2f aimNorm = aimVec;
+						aimNorm.Normalize();
+						Vec2f targetPos = Vec2f_zero;
 
-						// shoot
-						/*
-						if (!this.hasTag("no_more_shooting") && hooman.isMyPlayer() && ap.isKeyPressed(key_action3) && this.get_u32("next_shoot") < getGameTime())
+						if (getMap().rayCastSolidNoBlobs(barrelPos, barrelPos+aimNorm*500.0f, targetPos) && targetPos != Vec2f_zero)
 						{
-							CInventory@ inv = this.getInventory();
-							if (inv !is null && inv.getItem(0) !is null && inv.getItem(0).getName() == "mat_heatwarhead")
+							drawParticleLine( barrelPos, targetPos, Vec2f_zero, greenConsoleColor, 0, 2.0f); // target line
+							makeTargetSquare(targetPos, 0, Vec2f(2.0f, 2.0f), 2.0f, 1.0f, greenConsoleColor); // target pos
+
+							if (!this.hasTag("no_more_shooting") && ap.isKeyPressed(key_action3) && this.get_u32("next_shoot") < getGameTime())
 							{
-								if (!this.hasTag("no_more_shooting")) this.getSprite().PlaySound("Missile_Launch.ogg", 1.25f, 0.95f + XORRandom(15) * 0.01f);
-								f32 rot = 1.0f;
-								if (this.isFacingLeft()) rot = -1.0f;
-								ShootBullet(this, this.getPosition()+Vec2f(54.0f*rot, 0).RotateBy(angle), this.getPosition()+Vec2f(64.0f*rot, 0).RotateBy(angle), 30.0f);
-								this.Tag("no_more_shooting");
+								CInventory@ inv = this.getInventory();
+								if (inv !is null && inv.getItem(0) !is null && inv.getItem(0).getName() == "mat_heatwarhead")
+								{
+									if (!this.hasTag("no_more_shooting")) this.getSprite().PlaySound("Missile_Launch.ogg", 1.25f, 0.95f + XORRandom(15) * 0.01f);
+									
+									ShootBullet(this, barrelPos, barrelPos+Vec2f(1.0f*rot, -2.0f), 5.0f, targetPos);
+									this.Tag("no_more_shooting");
+								}
 							}
 						}
-						*/
-						
-						const f32 mass = this.getMass();
-
-						if (pressed_a) newForce += leftVelo;
-						if (pressed_d) newForce += rightVelo;
-							
-						if (pressed_m1)this.set_bool("glide", true);
-						else
-						{
-							this.set_bool("glide", false);
-							if (pressed_w) newForce += upVelo;
-							if (pressed_s) newForce += downVelo;
-						}
-
-						Vec2f mousePos = ap.getAimPos();
-						CBlob@ pilot = ap.getBlob();
-						
-						if (pilot !is null && pressed_m2 && (this.getVelocity().x < 5.00f || this.getVelocity().x > -5.00f))
-						{
-							if (mousePos.x < pilot.getPosition().x) this.SetFacingLeft(true);
-							else if (mousePos.x > pilot.getPosition().x) this.SetFacingLeft(false);
-						}
-						else if (this.getVelocity().x < -0.50f)
-							this.SetFacingLeft(true);
-						else if (this.getVelocity().x > 0.50f)
-							this.SetFacingLeft(false);
 					}
+					
+					const f32 mass = this.getMass();
+
+					if (pressed_a) newForce += leftVelo;
+					if (pressed_d) newForce += rightVelo;
+						
+					if (pressed_m1)this.set_bool("glide", true);
+					else
+					{
+						this.set_bool("glide", false);
+						if (pressed_w) newForce += upVelo;
+						if (pressed_s) newForce += downVelo;
+					}
+
+					Vec2f mousePos = ap.getAimPos();
+					CBlob@ pilot = ap.getBlob();
+					
+					if (pilot !is null && pressed_m2 && (this.getVelocity().x < 5.00f || this.getVelocity().x > -5.00f))
+					{
+						if (mousePos.x < pilot.getPosition().x) this.SetFacingLeft(true);
+						else if (mousePos.x > pilot.getPosition().x) this.SetFacingLeft(false);
+					}
+					else if (this.getVelocity().x < -0.50f)
+						this.SetFacingLeft(true);
+					else if (this.getVelocity().x > 0.50f)
+						this.SetFacingLeft(false);
 				}
 			}
 		}
-		Vec2f targetForce;
-		Vec2f currentForce = this.get_Vec2f("current_force");
-		CBlob@ pilot = this.getAttachmentPoint(0).getOccupied();
-		if (pilot !is null) targetForce = this.get_Vec2f("target_force") + newForce;
-		else targetForce = Vec2f(0, 0);
-
-		f32 targetForce_y = Maths::Clamp(targetForce.y, minClampVelocity.y, maxClampVelocity.y);
-
-		Vec2f clampedTargetForce = Vec2f(Maths::Clamp(targetForce.x, Maths::Max(minClampVelocity.x, -Maths::Abs(targetForce_y)), Maths::Min(maxClampVelocity.x, Maths::Abs(targetForce_y))), targetForce_y);
-		
-		Vec2f resultForce;
-		if(!this.get_bool("glide"))
-		{
-			resultForce = Vec2f(Lerp(currentForce.x, clampedTargetForce.x, lerp_speed_x), Lerp(currentForce.y, clampedTargetForce.y, lerp_speed_y));
-			this.set_Vec2f("current_force", resultForce);
-		}
-		else
-		{
-			resultForce = Vec2f(Lerp(currentForce.x, clampedTargetForce.x, lerp_speed_x), -0.5890000005);
-			this.set_Vec2f("current_force", resultForce);
-		}
-
-		this.AddForce(resultForce * thrust);
-		this.setAngleDegrees(resultForce.x * 75.00f);
-		
-		int anim_time_formula = Maths::Floor(1.00f + (1.00f - Maths::Abs(resultForce.getLength())) * 3) % 4;
-		blade.ResetTransform();
-		blade.SetOffset(Vec2f(-4, -26));
-		blade.animation.time = anim_time_formula;
-		if (blade.animation.time == 0)
-		{
-			blade.SetOffset(Vec2f(-5, -26));
-			blade.SetFrameIndex(0);
-			blade.RotateBy(180, Vec2f(0.0f,2.0f));
-		}
-		
-		tailrotor.animation.time = anim_time_formula;
-		if (tailrotor.animation.time == 0)
-		{
-			tailrotor.SetFrameIndex(1);
-		}
-		
-		sprite.SetEmitSoundSpeed(Maths::Min(0.00005f + Maths::Abs(resultForce.getLength() * 1.00f), 0.85f) * 1.55);
-
-		this.set_Vec2f("target_force", clampedTargetForce);
 	}
+	Vec2f targetForce;
+	Vec2f currentForce = this.get_Vec2f("current_force");
+	CBlob@ pilot = this.getAttachmentPoint(0).getOccupied();
+	if (pilot !is null) targetForce = this.get_Vec2f("target_force") + newForce;
+	else targetForce = Vec2f(0, 0);
+
+	f32 targetForce_y = Maths::Clamp(targetForce.y, minClampVelocity.y, maxClampVelocity.y);
+
+	Vec2f clampedTargetForce = Vec2f(Maths::Clamp(targetForce.x, Maths::Max(minClampVelocity.x, -Maths::Abs(targetForce_y)), Maths::Min(maxClampVelocity.x, Maths::Abs(targetForce_y))), targetForce_y);
+	
+	Vec2f resultForce;
+	if(!this.get_bool("glide"))
+	{
+		resultForce = Vec2f(Lerp(currentForce.x, clampedTargetForce.x, lerp_speed_x), Lerp(currentForce.y, clampedTargetForce.y, lerp_speed_y));
+		this.set_Vec2f("current_force", resultForce);
+	}
+	else
+	{
+		resultForce = Vec2f(Lerp(currentForce.x, clampedTargetForce.x, lerp_speed_x), -0.5890000005);
+		this.set_Vec2f("current_force", resultForce);
+	}
+
+	this.AddForce(resultForce * thrust);
+	this.setAngleDegrees(resultForce.x * 75.00f);
+	
+	int anim_time_formula = Maths::Floor(1.00f + (1.00f - Maths::Abs(resultForce.getLength())) * 3) % 4;
+	blade.ResetTransform();
+	blade.SetOffset(Vec2f(-4, -26));
+	blade.animation.time = anim_time_formula;
+	if (blade.animation.time == 0)
+	{
+		blade.SetOffset(Vec2f(-5, -26));
+		blade.SetFrameIndex(0);
+		blade.RotateBy(180, Vec2f(0.0f,2.0f));
+	}
+	
+	tailrotor.animation.time = anim_time_formula;
+	if (tailrotor.animation.time == 0)
+	{
+		tailrotor.SetFrameIndex(1);
+	}
+	
+	sprite.SetEmitSoundSpeed(Maths::Min(0.00005f + Maths::Abs(resultForce.getLength() * 1.00f), 0.85f) * 1.55);
+
+	this.set_Vec2f("target_force", clampedTargetForce);
+	
 }
 
-void ShootBullet(CBlob @this, Vec2f arrowPos, Vec2f aimpos, f32 arrowspeed)
+void ShootBullet(CBlob @this, Vec2f arrowPos, Vec2f aimpos, f32 arrowspeed, Vec2f targetPos)
 {
 	Vec2f arrowVel = (aimpos - arrowPos);
 	arrowVel.Normalize();
@@ -334,6 +313,7 @@ void ShootBullet(CBlob @this, Vec2f arrowPos, Vec2f aimpos, f32 arrowspeed)
 	CBitStream params;
 	params.write_Vec2f(arrowPos);
 	params.write_Vec2f(arrowVel);
+	params.write_Vec2f(targetPos);
 
 	this.SendCommand(this.getCommandID("shoot bullet"), params);
 }
@@ -347,17 +327,14 @@ void onCommand(CBlob@ this, u8 cmd, CBitStream @params)
 		if (!params.saferead_Vec2f(arrowPos)) return;
 		Vec2f arrowVel;
 		if (!params.saferead_Vec2f(arrowVel)) return;
+		Vec2f targetPos;
+		if (!params.saferead_Vec2f(targetPos)) return;
 
 		if (getNet().isServer() && !this.hasTag("no_more_proj"))
 		{
 			CBlob@ proj = CreateProj(this, arrowPos, arrowVel);
 			
-			proj.set_f32(projExplosionRadiusString, 25.0f);
-			proj.set_f32(projExplosionDamageString, 10.0f);
-
-			proj.set_s8(penRatingString, 1);
-
-			proj.server_SetTimeToDie(8);
+			proj.set_Vec2f("shutdown_pos", targetPos);
 
 			CInventory@ inv = this.getInventory();
 			if (inv !is null && inv.getItem(0) !is null && inv.getItem(0).getName() == "mat_heatwarhead")
@@ -377,14 +354,12 @@ CBlob@ CreateProj(CBlob@ this, Vec2f arrowPos, Vec2f arrowVel)
 {
 	if (!this.hasTag("no_more_proj"))
 	{
-		CBlob@ proj = server_CreateBlobNoInit("ballista_bolt");
+		CBlob@ proj = server_CreateBlobNoInit("missile_shutdown");
 		if (proj !is null)
 		{
 			proj.SetDamageOwnerPlayer(this.getPlayer());
 			proj.Init();
 
-			proj.set_f32("bullet_damage_body", 6.0f);
-			proj.set_f32("bullet_damage_head", 8.0f);
 			proj.IgnoreCollisionWhileOverlapped(this);
 			proj.server_setTeamNum(this.getTeamNum());
 			proj.setVelocity(arrowVel);
@@ -492,13 +467,6 @@ void MakeParticle(CBlob@ this, const Vec2f vel, const string filename = "SmallSt
 void onDie(CBlob@ this)
 {
 	DoExplosion(this);
-
-	AttachmentPoint@ ap = this.getAttachments().getAttachmentPointByName("JAVLAUNCHER");
-	if (this.get_u32("next_shoot") < getGameTime() && ap !is null)
-	{
-		CBlob@ launcher = ap.getOccupied();
-		if (launcher !is null) launcher.server_Die();
-	}
 	
 	if (this.exists("bladeid"))
 	{

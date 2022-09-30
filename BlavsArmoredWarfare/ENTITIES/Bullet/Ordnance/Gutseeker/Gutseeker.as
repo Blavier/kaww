@@ -6,28 +6,13 @@
 #include "Explosion.as"
 #include "OrdnanceCommon.as"
 
-Random _missile_r(12231);
-
 const f32 damage = 12.5f;
 const f32 searchRadius = 132.0f;
 const f32 radius = 40.0f;
 
 void onInit(CBlob@ this)
 {
-	this.Tag("jav");
-	MissileInfo missile;
-	missile.main_engine_force 			= GutseekerParams::main_engine_force;
-//	missile.secondary_engine_force 		= GutseekerParams::secondary_engine_force;
-//	missile.rcs_force 					= GutseekerParams::rcs_force;
-	missile.turn_speed 					= GutseekerParams::turn_speed;
-	missile.max_speed 					= GutseekerParams::max_speed;
-//	missile.lose_target_ticks 			= GutseekerParams::lose_target_ticks;
-	missile.gravity_scale 				= GutseekerParams::gravity_scale;
-	this.set("missileInfo", @missile);
-
 	this.set_Vec2f("disperse_pos", Vec2f_zero);
-
-	this.getShape().SetGravityScale(missile.gravity_scale);
 }
 
 void onTick(CBlob@ this)
@@ -214,11 +199,11 @@ void doThrustParticles(Vec2f pPos = Vec2f_zero, Vec2f pVel = Vec2f_zero)
 	if (pPos == Vec2f_zero || pVel == Vec2f_zero)
 	{ return; }
 
-	if (_missile_r.NextFloat() > 0.8f) //percentage chance of spawned particles
+	if (_ordnance_r.NextFloat() > 0.8f) //percentage chance of spawned particles
 	{ return; }
 
-	f32 pAngle = 360.0f * _missile_r.NextFloat();
-	pVel.RotateByDegrees( 20.0f * (1.0f - (2.0f * _missile_r.NextFloat())) );
+	f32 pAngle = 360.0f * _ordnance_r.NextFloat();
+	pVel.RotateByDegrees( 20.0f * (1.0f - (2.0f * _ordnance_r.NextFloat())) );
 
    	CParticle@ p = ParticleAnimated("PingParticle.png", pPos, pVel, pAngle, 0.4f, 1, 0, true);
    	if(p !is null)
@@ -248,14 +233,14 @@ void doMuzzleFlash(Vec2f thisPos = Vec2f_zero, Vec2f flashVec = Vec2f_zero)
    	{
 		Vec2f pPos = thisPos;
 		Vec2f pVel = flashNorm;
-		pVel *= 0.2f + _missile_r.NextFloat();
+		pVel *= 0.2f + _ordnance_r.NextFloat();
 
 		f32 randomDegrees = 20.0f;
-		randomDegrees *= 1.0f - (2.0f * _missile_r.NextFloat());
+		randomDegrees *= 1.0f - (2.0f * _ordnance_r.NextFloat());
 		pVel.RotateByDegrees(randomDegrees);
 		pVel *= 2.5; //final speed multiplier
 
-		f32 pAngle = 360.0f * _missile_r.NextFloat();
+		f32 pAngle = 360.0f * _ordnance_r.NextFloat();
 
 		CParticle@ p = ParticleAnimated("GenericBlast6.png", pPos, pVel, pAngle, 0.5f, 1, 0, true);
     	if(p !is null)
@@ -268,7 +253,7 @@ void doMuzzleFlash(Vec2f thisPos = Vec2f_zero, Vec2f flashVec = Vec2f_zero)
 		}
 	}
 	
-	Sound::Play("RPGFire.ogg", thisPos, 0.6f , 0.8f + (0.1f * _missile_r.NextFloat()));
+	Sound::Play("RPGFire.ogg", thisPos, 0.6f , 0.8f + (0.1f * _ordnance_r.NextFloat()));
 }
 
 bool doesCollideWithBlob(CBlob@ this, CBlob@ blob)
@@ -325,8 +310,8 @@ void onDie( CBlob@ this )
 			CBlob@ targetBlob = getBlobByNetworkID(netID);
 			if (targetBlob == null) continue;
 
-			Vec2f launchVec = Vec2f(1.0f + _missile_r.NextFloat(), 0);
-			launchVec.RotateByDegrees(360.0f * _missile_r.NextFloat());
+			Vec2f launchVec = Vec2f(1.0f + _ordnance_r.NextFloat(), 0);
+			launchVec.RotateByDegrees(360.0f * _ordnance_r.NextFloat());
 			
 			CBlob@ blob = server_CreateBlob("missile_gutseeker", this.getTeamNum(), thisPos);
 			if (blob != null)
@@ -349,18 +334,18 @@ void makeMissileEffect(Vec2f thisPos = Vec2f_zero)
 
 	u16 particleNum = XORRandom(5)+5;
 
-	Sound::Play("Bomb.ogg", thisPos, 0.8f, 0.8f + (0.4f * _missile_r.NextFloat()) );
+	Sound::Play("Bomb.ogg", thisPos, 0.8f, 0.8f + (0.4f * _ordnance_r.NextFloat()) );
 
 	for (int i = 0; i < particleNum; i++)
     {
-        Vec2f pOffset(_missile_r.NextFloat() * radius, 0);
-        pOffset.RotateBy(_missile_r.NextFloat() * 360.0f);
+        Vec2f pOffset(_ordnance_r.NextFloat() * radius, 0);
+        pOffset.RotateBy(_ordnance_r.NextFloat() * 360.0f);
 
         CParticle@ p = ParticleAnimated("BulletHitParticle1.png", 
 									thisPos + pOffset, 
 									Vec2f_zero, 
-									_missile_r.NextFloat() * 360.0f, 
-									0.5f + (_missile_r.NextFloat() * 0.5f), 
+									_ordnance_r.NextFloat() * 360.0f, 
+									0.5f + (_ordnance_r.NextFloat() * 0.5f), 
 									XORRandom(3)+1, 
 									0.0f, 
 									false );

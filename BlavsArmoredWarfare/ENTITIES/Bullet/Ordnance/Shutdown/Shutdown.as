@@ -6,32 +6,9 @@
 #include "Explosion.as"
 #include "OrdnanceCommon.as"
 
-Random _missile_r(12231);
-
-const f32 radius = 32.0f;
-const f32 damage = 15.0f;
-
 void onInit(CBlob@ this)
 {
-	//this.Tag("jav");
-	MissileInfo missile;
-	missile.main_engine_force 			= JavelinParams::main_engine_force;
-//	missile.secondary_engine_force 		= JavelinParams::secondary_engine_force;
-//	missile.rcs_force 					= JavelinParams::rcs_force;
-	missile.turn_speed 					= JavelinParams::turn_speed;
-	missile.max_speed 					= JavelinParams::max_speed;
-//	missile.lose_target_ticks 			= JavelinParams::lose_target_ticks;
-	missile.gravity_scale 				= JavelinParams::gravity_scale;
-	this.set("missileInfo", @missile);
-
-	this.set_f32(projExplosionRadiusString, 30.0f);
-	this.set_f32(projExplosionDamageString, 15.0f);
-
-	this.set_s8(penRatingString, 3); // armor penetration is high for javelins
-
-	this.set_f32(robotechHeightString, 64.0f); // pixels
-
-	this.getShape().SetGravityScale(missile.gravity_scale);
+	this.set_Vec2f("shutdown_pos", Vec2f_zero);
 }
 
 void onTick(CBlob@ this)
@@ -89,20 +66,9 @@ void onTick(CBlob@ this)
 	if (!this.get( "missileInfo", @missile )) 
 	{ return; }
 
-	u16 targetBlobID = this.get_u16(targetNetIDString);
-	CBlob@ targetBlob = getBlobByNetworkID(targetBlobID);
-	if ( targetBlobID == 0 || targetBlob == null || this.getTickSinceCreated() < 5)
+	if (is_client) // smoke effect
 	{
-		return;
-	}
-
-	// smoke effect
-	if (XORRandom(2) == 0) 
-	{
-		if (is_client)
-		{
-			ParticleAnimated("LargeSmoke", this.getPosition(), getRandomVelocity(0.0f, XORRandom(130) * 0.01f, 90), float(XORRandom(360)), 0.5f + XORRandom(25) * 0.01f, 1 + XORRandom(3), XORRandom(70) * -0.00005f, true);
-		}
+		ParticleAnimated("LargeSmoke", this.getPosition(), getRandomVelocity(0.0f, XORRandom(130) * 0.01f, 90), float(XORRandom(360)), 0.5f, 1 + XORRandom(3), XORRandom(70) * -0.00005f, true);
 	}
 	
 	//homing logic
@@ -110,22 +76,15 @@ void onTick(CBlob@ this)
 	const float maxSpeed = missile.max_speed;
 	const float turnSpeed = missile.turn_speed;
 	
-	Vec2f targetPos = targetBlob.getPosition();
-	Vec2f targetVel = targetBlob.getVelocity();
+	Vec2f targetPos = this.get_Vec2f("shutdown_pos");
 
-	Vec2f bVel = thisVel - targetVel; //compensates for missile speed
+	Vec2f bVel = thisVel; //compensates for missile speed
 	float bSpeed = bVel.getLength();
-	Vec2f bVelNorm = bVel;
-	bVelNorm.Normalize();
 
 	Vec2f targetVec = targetPos - thisPos;
-	f32 targetDist = targetVec.getLength(); // distance to target
-	this.set_Vec2f("target_vec", targetVec); // for shaped charge direction
 
 	float gravityScale = missile.gravity_scale;
-	Vec2f gravity = Vec2f(0, (sv_gravity*gravityScale) / getTicksASecond()); 
-	Vec2f gravityNorm = gravity;
-	gravityNorm.Normalize();
+	Vec2f gravity = Vec2f(0, (sv_gravity*gravityScale) / getTicksASecond());
 
 	Vec2f lastBVel = this.get_Vec2f(lastRelativeVelString);
 	Vec2f bAccel = (lastBVel - bVel);
@@ -136,51 +95,33 @@ void onTick(CBlob@ this)
 	
 	float turnAngle = 0.0f;
 
-	switch (this.get_s8(navigationPhaseString))
+	Vec2f bVelFinal = bVel - (bAccel*bAccel.getLengthSquared());
+	float bVelFinalAngle = bVelFinal.getAngleDegrees();
+	float targetVecAngle = targetVec.getAngleDegrees();
+
+	float directionDiff = targetVecAngle - bVelFinalAngle;
+	directionDiff += directionDiff > 180 ? -360 : directionDiff < -180 ? 360 : 0;
+	bool movingAway = Maths::Abs(directionDiff) > 90.0f;
+
+	turnAngle = movingAway ? bVelFinalAngle + 180.0f : targetVecAngle + directionDiff;
+
+	float gravInfluence = (gravity.y / mainEngineForce);
+	float gravityDiff = 90.0f - turnAngle;
+	gravityDiff += gravityDiff > 180 ? -360 : gravityDiff < -180 ? 360 : 0;
+
+	if (gravityDiff > 90.0f) 
 	{
-		case 0:
-		{
-			Vec2f risingPos = targetPos + Vec2f(0, -2000.0f);
-			turnAngle = (risingPos-thisPos).getAngleDegrees();
-			
-			if (thisPos.y < this.get_f32(robotechHeightString))
-			{
-				this.set_s8(navigationPhaseString, 1);
-			}
-		}
-		break;
-
-		case 1:
-		{
-			Vec2f bVelFinal = bVel - (bAccel*bAccel.getLengthSquared());
-			float bVelFinalAngle = bVelFinal.getAngleDegrees();
-			float targetVecAngle = targetVec.getAngleDegrees();
-		
-			float directionDiff = targetVecAngle - bVelFinalAngle;
-			directionDiff += directionDiff > 180 ? -360 : directionDiff < -180 ? 360 : 0;
-			bool movingAway = Maths::Abs(directionDiff) > 90.0f;
-
-			turnAngle = movingAway ? bVelFinalAngle + 180.0f : targetVecAngle + directionDiff;
-
-			float gravInfluence = (gravity.y / mainEngineForce);
-			float gravityDiff = 90.0f - turnAngle;
-			gravityDiff += gravityDiff > 180 ? -360 : gravityDiff < -180 ? 360 : 0;
-
-			if (gravityDiff > 90.0f) 
-			{
-				gravityDiff = 180.0f - gravityDiff;
-			}
-			else if (gravityDiff < -90.0f)
-			{
-				gravityDiff = -180.0f - gravityDiff;
-			}
-			gravityDiff *= gravInfluence;
-
-			float optimalAngle = turnAngle + gravityDiff;
-			turnAngle = optimalAngle;
-		}
-		break;
+		gravityDiff = 180.0f - gravityDiff;
 	}
+	else if (gravityDiff < -90.0f)
+	{
+		gravityDiff = -180.0f - gravityDiff;
+	}
+	gravityDiff *= gravInfluence;
+
+	float optimalAngle = turnAngle + gravityDiff;
+	turnAngle = optimalAngle;
+	
 	
 	float angle = -turnAngle + 360.0f;
 	float thisAngle = this.getAngleDegrees();
@@ -213,8 +154,10 @@ void onTick(CBlob@ this)
 	
 	if (hasThrust) doThrustParticles(thisPos, -thrustNorm*2.0f); //exhaust particles
 	
+	float missileAge = Maths::Min(float(this.getTickSinceCreated()) / 20.0f, 1.0f);
+	missileAge = 2.0f - missileAge;
 	//client UI and sounds
-	makeTargetSquare(targetPos-thisVel, targetSquareAngle, Vec2f(2.5f, 2.5f), 2.0f, 1.0f, redConsoleColor); //target acquired square
+	makeTargetSquare(targetPos, targetSquareAngle, Vec2f(2.5f, 2.5f)*missileAge, 2.0f, 1.0f, redConsoleColor); //target acquired square
 }
 
 void doThrustParticles(Vec2f pPos = Vec2f_zero, Vec2f pVel = Vec2f_zero)
@@ -225,11 +168,11 @@ void doThrustParticles(Vec2f pPos = Vec2f_zero, Vec2f pVel = Vec2f_zero)
 	if (pPos == Vec2f_zero || pVel == Vec2f_zero)
 	{ return; }
 
-	if (_missile_r.NextFloat() > 0.8f) //percentage chance of spawned particles
+	if (_ordnance_r.NextFloat() > 0.8f) //percentage chance of spawned particles
 	{ return; }
 
-	f32 pAngle = 360.0f * _missile_r.NextFloat();
-	pVel.RotateByDegrees( 20.0f * (1.0f - (2.0f * _missile_r.NextFloat())) );
+	f32 pAngle = 360.0f * _ordnance_r.NextFloat();
+	pVel.RotateByDegrees( 20.0f * (1.0f - (2.0f * _ordnance_r.NextFloat())) );
 
    	CParticle@ p = ParticleAnimated("PingParticle.png", pPos, pVel, pAngle, 0.4f, 1, 0, true);
    	if(p !is null)
@@ -259,14 +202,14 @@ void doMuzzleFlash(Vec2f thisPos = Vec2f_zero, Vec2f flashVec = Vec2f_zero)
    	{
 		Vec2f pPos = thisPos;
 		Vec2f pVel = flashNorm;
-		pVel *= 0.2f + _missile_r.NextFloat();
+		pVel *= 0.2f + _ordnance_r.NextFloat();
 
 		f32 randomDegrees = 20.0f;
-		randomDegrees *= 1.0f - (2.0f * _missile_r.NextFloat());
+		randomDegrees *= 1.0f - (2.0f * _ordnance_r.NextFloat());
 		pVel.RotateByDegrees(randomDegrees);
 		pVel *= 2.5; //final speed multiplier
 
-		f32 pAngle = 360.0f * _missile_r.NextFloat();
+		f32 pAngle = 360.0f * _ordnance_r.NextFloat();
 
 		CParticle@ p = ParticleAnimated("GenericBlast6.png", pPos, pVel, pAngle, 0.5f, 1, 0, true);
     	if(p !is null)
@@ -279,7 +222,7 @@ void doMuzzleFlash(Vec2f thisPos = Vec2f_zero, Vec2f flashVec = Vec2f_zero)
 		}
 	}
 	
-	Sound::Play("RPGFire.ogg", thisPos, 0.6f , 0.8f + (0.1f * _missile_r.NextFloat()));
+	Sound::Play("AntiTank_shoot.ogg", thisPos, 0.6f , 0.8f + (0.1f * _ordnance_r.NextFloat()));
 }
 
 bool doesCollideWithBlob(CBlob@ this, CBlob@ blob)
@@ -296,6 +239,7 @@ bool doesCollideWithBlob(CBlob@ this, CBlob@ blob)
 		&&
 		(
 			blob.hasTag("vehicle") ||
+			blob.hasTag("flesh") ||
 			blob.hasTag("turret") ||
 			blob.hasTag("bunker")
 		)
@@ -320,7 +264,7 @@ void onDie( CBlob@ this )
 {
 	Vec2f thisPos = this.getPosition();
 
-	DoExplosion(this, this.get_Vec2f("target_vec"));
+	DoExplosion(this);
 
 	makeMissileEffect(thisPos); //boom effect
 }
@@ -332,18 +276,18 @@ void makeMissileEffect(Vec2f thisPos = Vec2f_zero)
 
 	u16 particleNum = XORRandom(5)+5;
 
-	Sound::Play("Bomb.ogg", thisPos, 0.8f, 0.8f + (0.4f * _missile_r.NextFloat()) );
+	Sound::Play("Bomb.ogg", thisPos, 0.8f, 0.8f + (0.4f * _ordnance_r.NextFloat()) );
 
 	for (int i = 0; i < particleNum; i++)
     {
-        Vec2f pOffset(_missile_r.NextFloat() * 32.0f, 0);
-        pOffset.RotateBy(_missile_r.NextFloat() * 360.0f);
+        Vec2f pOffset(_ordnance_r.NextFloat() * 32.0f, 0);
+        pOffset.RotateBy(_ordnance_r.NextFloat() * 360.0f);
 
         CParticle@ p = ParticleAnimated("BulletHitParticle1.png", 
 									thisPos + pOffset, 
 									Vec2f_zero, 
-									_missile_r.NextFloat() * 360.0f, 
-									0.5f + (_missile_r.NextFloat() * 0.5f), 
+									_ordnance_r.NextFloat() * 360.0f, 
+									0.5f + (_ordnance_r.NextFloat() * 0.5f), 
 									XORRandom(3)+1, 
 									0.0f, 
 									false );
@@ -356,7 +300,7 @@ void makeMissileEffect(Vec2f thisPos = Vec2f_zero)
     }
 }
 
-bool DoExplosion(CBlob@ this, Vec2f explosionVec)
+bool DoExplosion(CBlob@ this)
 {
 	float projExplosionRadius = this.get_f32(projExplosionRadiusString);
 	float projExplosionDamage = this.get_f32(projExplosionDamageString);

@@ -37,9 +37,13 @@ enum EntityHash
 	_heavygun = -153292038, // MG
 
 	// structures
-
 	_bunker = -1830468768, // Normal Bunker
-	_heavybunker = -246580451 // Tall Bunker
+	_heavybunker = -246580451, // Tall Bunker
+
+	// ordnance
+	_missile_javelin = -324940469,
+	_missile_gutseeker = 1386892927,
+	_missile_shutdown = 1130938398
 
 	
 	//_ = 1111111,
