@@ -17,59 +17,10 @@ void onInit(CBlob@ this)
 {
 	this.Tag("vehicle");
 
-	s8 armorRating = 0;
-	bool hardShelled = false;
-
 	s8 weaponRating = 0;
 
 	string blobName = this.getName();
 	int blobHash = blobName.getHash();
-	switch(blobHash)
-	{
-		case _maus: // maus
-		case _mausturret: // MAUS Shell cannon
-		{
-			armorRating = 5;
-			hardShelled = true;
-		}
-		break;
-
-		case _t10: // T10
-		case _t10turret: // T10 Shell cannon
-		armorRating = 4; break;
-			
-		case _m60: // normal tank
-		case _m60turret: // M60 Shell cannon
-		armorRating = 3; break;
-
-		case _transporttruck: // vanilla truck?
-		case _armory: // shop truck
-		case _btr82a: // big APC
-		case _btrturret: // big APC cannon
-		case _heavygun: // MG
-		armorRating = 2; break;
-
-		case _uh1: // heli
-		case _pszh4: // smol APC
-		case _pszh4turret: // smol APC cannon
-		case _techtruck: // MG truck
-		case _gun: // light MG
-		armorRating = 1; break;
-
-		case _bf109: // plane
-		case _civcar: // car
-		armorRating = 0; break;
-
-		case _motorcycle: // bike
-		case _jourcop: // journalist
-		armorRating = -1; break;
-
-		default:
-		{
-			//print ("blobName: "+ blobName + " hash: "+blobHash);
-			//print ("-");
-		}
-	}
 
 	switch(blobHash) // weapon rating and length of linear (map) and circled explosion damage
 	{
@@ -106,31 +57,6 @@ void onInit(CBlob@ this)
 		}
 	}
 
-	float backsideOffset = -1.0f;
-	switch(blobHash) // backside vulnerability point
-	{
-		case _maus: // maus
-		backsideOffset = 24.0f; break;
-
-		case _t10: // T10
-		backsideOffset = 20.0f; break;
-		
-		case _m60: // normal tank
-		backsideOffset = 16.0f; break;
-
-		case _btr82a: // big APC
-		backsideOffset = 16.0f; break;
-
-		case _pszh4: // smol APC
-		backsideOffset = 16.0f; break;
-
-		case _uh1: // heli
-		backsideOffset = 24.0f; break;
-
-		case _bf109: // plane
-		backsideOffset = 8.0f; break;
-	}
-
 	// speedy stuff
 	f32 intake;
 	switch(blobHash) // backside vulnerability point
@@ -161,13 +87,7 @@ void onInit(CBlob@ this)
 	}
 	this.set_f32("add_gas_intake", intake);
 
-	this.set_f32(backsideOffsetString, backsideOffset);
-
-	this.set_s8(armorRatingString, armorRating);
-	this.set_bool(hardShelledString, hardShelled);
-
 	this.set_s8(weaponRatingString, weaponRating);
-
 
 	this.set_f32(engineRPMString, 0.0f);
 	this.set_f32(engineThrottleString, 0.0f);
@@ -507,73 +427,6 @@ void onCommand(CBlob@ this, u8 cmd, CBitStream @params)
 
 f32 onHit(CBlob@ this, Vec2f worldPoint, Vec2f velocity, f32 damage, CBlob@ hitterBlob, u8 customData)
 {
-	Vec2f thisPos = this.getPosition();
-	Vec2f hitterBlobPos = hitterBlob.getPosition();
-
-	s8 armorRating = this.get_s8(armorRatingString);
-	s8 penRating = hitterBlob.get_s8(penRatingString);
-	bool hardShelled = this.get_bool(hardShelledString);
-
-	if (customData == Hitters::sword) penRating -= 3; // knives don't pierce armor
-
-	if (this.hasTag("turret")) this.set_u32("show_hp", getGameTime() + turretShowHPSeconds * 30);
-
-	const bool is_explosive = customData == Hitters::explosion || customData == Hitters::keg;
-
-	bool isHitUnderside = false;
-	bool isHitBackside = false;
-
-	float damageNegation = 0.0f;
-	//print ("blob: "+this.getName()+" - damage: "+damage);
-	s8 finalRating = getFinalRating(armorRating, penRating, hardShelled, this, hitterBlobPos, isHitUnderside, isHitBackside);
-	//print("finalRating: "+finalRating);
-	// add more damage if hit from below or hit backside of the tank (only hull)
-	if (isHitUnderside || isHitBackside)
-	{
-		damage *= 1.5f;
-	}
-
-	switch (finalRating)
-	{
-		// negative armor, trickles up
-		case -2:
-		{
-			if (is_explosive && damage != 0) damage += 1.5f; // suffer bonus base damage (you just got your entire vehicle burned)
-			damage *= 1.5f;
-		}
-		case -1:
-		{
-			damage *= 1.3f;
-		}
-		break;
-
-		// positive armor, trickles down
-		case 5:
-		{
-			damageNegation += 0.5f; // reduction to final damage, extremely tanky
-		}
-		case 4:
-		{
-			damage *= 0.6f;
-		}
-		case 3:
-		{
-			damage *= 0.7f;
-		}
-		case 2:
-		{
-			damage *= 0.7f;
-		}
-		case 1:
-		{
-			damageNegation += 0.2f; // reduction to final damage, for negating small bullets
-			damage = Maths::Max(damage - damageNegation, 0.0f); // nullification happens here
-		}
-		break;
-	}
-
-	//print ("finalDamage: "+damage);
-
 	// if damage is not insignificant, prevent repairs for a time
 	if (damage > 0.25f)
 	{
@@ -582,7 +435,7 @@ f32 onHit(CBlob@ this, Vec2f worldPoint, Vec2f velocity, f32 damage, CBlob@ hitt
 		if (isClient())
 		{
 			CSprite@ thisSprite = this.getSprite();
-			if (thisSprite != null && customData == Hitters::ballista && armorRating > 1) // ballista hits are usually anti-tank. Don't ask me.
+			if (thisSprite != null && customData == Hitters::ballista && this.get_s8(armorRatingString) > 1) // ballista hits are usually anti-tank. Don't ask me.
 			{
 				if (this.hasTag("turret")) thisSprite.PlaySound("BigDamage", 2.5f, 0.85f + XORRandom(40)*0.01f); 
 				thisSprite.PlaySound("shell_Hit", 3.5f, 0.85f + XORRandom(40)*0.01f);
@@ -595,6 +448,8 @@ f32 onHit(CBlob@ this, Vec2f worldPoint, Vec2f velocity, f32 damage, CBlob@ hitt
 
 bool isInventoryAccessible(CBlob@ this, CBlob@ forBlob)
 {
+	if (this.hasTag("turret")) this.set_u32("show_hp", getGameTime() + turretShowHPSeconds * 30);
+
 	if (forBlob.getTeamNum() == this.getTeamNum() && canSeeButtons(this, forBlob))
 	{
 		VehicleInfo@ v;
