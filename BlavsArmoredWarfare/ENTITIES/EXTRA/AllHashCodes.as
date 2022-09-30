@@ -34,7 +34,12 @@ enum EntityHash
 	_t10turret = -616940740, // T10 Shell cannon
 	_mausturret = 56012293, // MAUS Shell cannon
 	_gun = 1043670821, // light MG
-	_heavygun = -153292038 // MG
+	_heavygun = -153292038, // MG
+
+	// structures
+
+	_bunker = -1830468768, // Normal Bunker
+	_heavybunker = -246580451 // Tall Bunker
 
 	
 	//_ = 1111111,

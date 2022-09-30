@@ -60,23 +60,14 @@ f32 onHit(CBlob@ this, Vec2f worldPoint, Vec2f velocity, f32 damage, CBlob@ hitt
 {
 	if (hitterBlob.getName() == "grenade")
 	{
-		return damage * 2;
+		return damage * 3;
 	}
-	if (customData == Hitters::flying)
+	if (customData == Hitters::flying || customData == Hitters::flying)
 	{
-		this.server_Hit(hitterBlob, hitterBlob.getPosition(), this.getOldVelocity(), 5.0f, Hitters::flying, true);
-
+		this.server_Hit(hitterBlob, hitterBlob.getPosition(), this.getOldVelocity(), 3.5f, Hitters::flying, true);
 		if (!hitterBlob.hasTag("deal_bunker_dmg")) return 0;
 		return damage / 35;
 	}
-	if (customData == Hitters::explosion)
-	{
-		return damage / 5;
-	}
-	if (hitterBlob.hasTag("vehicle") && customData != Hitters::explosion)
-	{
-		if (!hitterBlob.hasTag("deal_bunker_dmg")) return 0;
-		return Maths::Min(0.2f, damage);
-	}
+	
 	return damage;
 }

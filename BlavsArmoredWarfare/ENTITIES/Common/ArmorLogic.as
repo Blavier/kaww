@@ -15,6 +15,7 @@ void onInit(CBlob@ this)
 	{
 		case _maus: // maus
 		case _mausturret: // MAUS Shell cannon
+		case _heavybunker: // Tall Bunker
 		{
 			armorRating = 5;
 			hardShelled = true;
@@ -27,6 +28,7 @@ void onInit(CBlob@ this)
 			
 		case _m60: // normal tank
 		case _m60turret: // M60 Shell cannon
+		case _bunker: // Normal Bunker
 		armorRating = 3; break;
 
 		case _transporttruck: // vanilla truck?

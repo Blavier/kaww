@@ -80,21 +80,6 @@ f32 onHit(CBlob@ this, Vec2f worldPoint, Vec2f velocity, f32 damage, CBlob@ hitt
 		if (!hitterBlob.hasTag("deal_bunker_dmg")) return 0;
 		return damage / 35;
 	}
-	if (customData == Hitters::arrow)
-	{
-		//this.server_Hit(hitterBlob, hitterBlob.getPosition(), this.getOldVelocity(), 3.5f, Hitters::flying, true);
-
-		return damage * 1.5;
-	}
-	if (customData == Hitters::explosion)
-	{
-		return damage *= 0.4f;
-	}
-	if (hitterBlob.hasTag("vehicle"))
-	{
-		if (!hitterBlob.hasTag("deal_bunker_dmg")) return 0;
-		return Maths::Min(0.2f, damage);
-	}
 	
 	return damage;
 }
