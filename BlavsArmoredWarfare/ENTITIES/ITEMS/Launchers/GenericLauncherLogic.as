@@ -10,6 +10,8 @@ void onInit(CBlob@ this)
 	this.Tag("trap"); // so bullets pass
 	this.Tag("hidesgunonhold"); // is it's own weapon
 
+	this.Tag("ignore_holding");
+
 	this.addCommandID(launchOrdnanceIDString);
 	this.addCommandID(launcherSetDeathIDString);
 	this.addCommandID(launcherUpdateStateIDString);

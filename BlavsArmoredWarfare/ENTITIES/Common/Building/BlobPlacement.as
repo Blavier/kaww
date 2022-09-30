@@ -204,27 +204,31 @@ void onTick(CBlob@ this)
 	CBlob @carryBlob = this.getCarriedBlob();
 	if (carryBlob !is null)
 	{
-		if (carryBlob.hasTag("place ignore facing"))
+		if (!carryBlob.hasTag("ignore_holding"))
 		{
-			carryBlob.getSprite().SetFacingLeft(false);
-		}
-
-		// hide block in hands when placing close
-		if (!carryBlob.isSnapToGrid())
-		{
-			PositionCarried(this, carryBlob);
-		}
-		else
-		{
-			if (carryBlob.hasTag("place norotate"))
+			if (carryBlob.hasTag("place ignore facing"))
 			{
-				this.getCarriedBlob().setAngleDegrees(0.0f);
+				carryBlob.getSprite().SetFacingLeft(false);
+			}
+
+			// hide block in hands when placing close
+			if (!carryBlob.isSnapToGrid())
+			{
+				PositionCarried(this, carryBlob);
 			}
 			else
 			{
-				this.getCarriedBlob().setAngleDegrees(this.get_u16("build_angle"));
+				if (carryBlob.hasTag("place norotate"))
+				{
+					this.getCarriedBlob().setAngleDegrees(0.0f);
+				}
+				else
+				{
+					this.getCarriedBlob().setAngleDegrees(this.get_u16("build_angle"));
+				}
 			}
 		}
+		
 	}
 
 	if (!this.isMyPlayer())
