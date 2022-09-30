@@ -57,22 +57,7 @@ void onInit(CBlob@ this)
 	}
 
 	CSprite@ sprite = this.getSprite();
-	CSpriteLayer@ arm = sprite.addSpriteLayer("arm", "UHT_Launcher", 16, 16);
-
-	if (arm !is null)
-	{
-		f32 angle = low_angle;
-
-		Animation@ anim = arm.addAnimation("default", 0, false);
-		anim.AddFrame(20);
-
-		CSpriteLayer@ arm = this.getSprite().getSpriteLayer("arm");
-		if (arm !is null)
-		{
-			arm.SetRelativeZ(0.5f);
-			arm.SetOffset(Vec2f(-32.0f, 10.0f));
-		}
-	}
+	
 
 	this.SetMapEdgeFlags(CBlob::map_collide_left | CBlob::map_collide_right);
 
@@ -116,6 +101,18 @@ void onInit(CSprite@ this)
 		tailrotor.SetOffset(Vec2f(58.0, -9));
 		tailrotor.SetRelativeZ(20.0f);
 		tailrotor.SetVisible(true);
+	}
+
+	//Add missile launcher
+	CSpriteLayer@ arm = this.addSpriteLayer("arm", "UHT_Launcher", 16, 16);
+	if (arm !is null)
+	{
+		CSpriteLayer@ arm = this.getSpriteLayer("arm");
+		if (arm !is null)
+		{
+			arm.SetRelativeZ(0.5f);
+			arm.SetOffset(Vec2f(-32.0f, 10.0f));
+		}
 	}
 
 	this.SetEmitSound("Eurokopter_Loop.ogg");
@@ -180,33 +177,45 @@ void onTick(CBlob@ this)
 	
 	CSpriteLayer@ blade = sprite.getSpriteLayer("blade");
 	CSpriteLayer@ tailrotor = sprite.getSpriteLayer("tailrotor");
+	CSpriteLayer@ arm = sprite.getSpriteLayer("arm");
 	for(int a = 0; a < aps.length; a++)
 	{
 		AttachmentPoint@ ap = aps[a];
 		if (ap !is null)
 		{
 			CBlob@ hooman = ap.getOccupied();
-			if (hooman !is null)
+			if (hooman == null) continue;
+			
+			if (ap.name == "DRIVER")
 			{
-				if (ap.name == "DRIVER")
+				const bool pressed_w  = ap.isKeyPressed(key_up);
+				const bool pressed_s  = ap.isKeyPressed(key_down);
+				const bool pressed_a  = ap.isKeyPressed(key_left);
+				const bool pressed_d  = ap.isKeyPressed(key_right);
+				const bool pressed_c  = ap.isKeyPressed(key_pickup);
+				const bool pressed_m1 = ap.isKeyPressed(key_action1);
+				const bool pressed_m2 = ap.isKeyPressed(key_action2);
+
+				if (isClient())
 				{
-					const bool pressed_w  = ap.isKeyPressed(key_up);
-					const bool pressed_s  = ap.isKeyPressed(key_down);
-					const bool pressed_a  = ap.isKeyPressed(key_left);
-					const bool pressed_d  = ap.isKeyPressed(key_right);
-					const bool pressed_c  = ap.isKeyPressed(key_pickup);
-					const bool pressed_m1 = ap.isKeyPressed(key_action1);
-					const bool pressed_m2 = ap.isKeyPressed(key_action2);
+					float rot = flip ? -1.0f : 1.0f;
+					Vec2f barrelPos = thisPos + Vec2f(28.0f*rot, 10.0f).RotateBy(angle);
+					Vec2f ownerAimpos = ap.getAimPos() + Vec2f(2.0f, 2.0f);
+					Vec2f aimVec = ownerAimpos - barrelPos;
+					Vec2f aimNorm = aimVec;
+					aimNorm.Normalize();
+
+					if (arm != null)
+					{
+						float aimAngle = -aimNorm.getAngleDegrees() + 360.0f;
+						if (flip) aimAngle -= 180.0f;
+						arm.ResetTransform();
+						arm.RotateByDegrees(aimAngle, Vec2f(4.0f,0));
+					}
 
 					// shoot
 					if (hooman.isMyPlayer())
 					{
-						float rot = this.isFacingLeft() ? -1.0f : 1.0f;
-						Vec2f barrelPos = thisPos + Vec2f(30.0f*rot, 0).RotateBy(angle);
-						Vec2f ownerAimpos = ap.getAimPos() + Vec2f(2.0f, 2.0f);
-						Vec2f aimVec = ownerAimpos - barrelPos;
-						Vec2f aimNorm = aimVec;
-						aimNorm.Normalize();
 						Vec2f targetPos = Vec2f_zero;
 
 						if (getMap().rayCastSolidNoBlobs(barrelPos, barrelPos+aimNorm*500.0f, targetPos) && targetPos != Vec2f_zero)
@@ -221,40 +230,41 @@ void onTick(CBlob@ this)
 								{
 									if (!this.hasTag("no_more_shooting")) this.getSprite().PlaySound("Missile_Launch.ogg", 1.25f, 0.95f + XORRandom(15) * 0.01f);
 									
-									ShootBullet(this, barrelPos, barrelPos+Vec2f(1.0f*rot, -2.0f), 5.0f, targetPos);
+									ShootBullet(this, barrelPos, aimNorm, 3.0f, targetPos);
 									this.Tag("no_more_shooting");
 								}
 							}
 						}
 					}
-					
-					const f32 mass = this.getMass();
-
-					if (pressed_a) newForce += leftVelo;
-					if (pressed_d) newForce += rightVelo;
-						
-					if (pressed_m1)this.set_bool("glide", true);
-					else
-					{
-						this.set_bool("glide", false);
-						if (pressed_w) newForce += upVelo;
-						if (pressed_s) newForce += downVelo;
-					}
-
-					Vec2f mousePos = ap.getAimPos();
-					CBlob@ pilot = ap.getBlob();
-					
-					if (pilot !is null && pressed_m2 && (this.getVelocity().x < 5.00f || this.getVelocity().x > -5.00f))
-					{
-						if (mousePos.x < pilot.getPosition().x) this.SetFacingLeft(true);
-						else if (mousePos.x > pilot.getPosition().x) this.SetFacingLeft(false);
-					}
-					else if (this.getVelocity().x < -0.50f)
-						this.SetFacingLeft(true);
-					else if (this.getVelocity().x > 0.50f)
-						this.SetFacingLeft(false);
 				}
+				
+				const f32 mass = this.getMass();
+
+				if (pressed_a) newForce += leftVelo;
+				if (pressed_d) newForce += rightVelo;
+					
+				if (pressed_m1)this.set_bool("glide", true);
+				else
+				{
+					this.set_bool("glide", false);
+					if (pressed_w) newForce += upVelo;
+					if (pressed_s) newForce += downVelo;
+				}
+
+				Vec2f mousePos = ap.getAimPos();
+				CBlob@ pilot = ap.getBlob();
+				
+				if (pilot !is null && pressed_m2 && (this.getVelocity().x < 5.00f || this.getVelocity().x > -5.00f))
+				{
+					if (mousePos.x < pilot.getPosition().x) this.SetFacingLeft(true);
+					else if (mousePos.x > pilot.getPosition().x) this.SetFacingLeft(false);
+				}
+				else if (this.getVelocity().x < -0.50f)
+					this.SetFacingLeft(true);
+				else if (this.getVelocity().x > 0.50f)
+					this.SetFacingLeft(false);
 			}
+			
 		}
 	}
 	Vec2f targetForce;
