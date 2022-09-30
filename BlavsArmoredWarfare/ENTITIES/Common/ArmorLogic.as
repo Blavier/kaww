@@ -62,7 +62,7 @@ void onInit(CBlob@ this)
 	switch(blobHash) // backside vulnerability point
 	{
 		case _maus: // maus
-		backsideOffset = 24.0f; break;
+		backsideOffset = 20.0f; break;
 
 		case _t10: // T10
 		backsideOffset = 20.0f; break;
