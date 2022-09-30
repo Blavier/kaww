@@ -828,11 +828,13 @@ void ShootBullet( CBlob@ this, Vec2f arrowPos, Vec2f aimpos, float arrowspeed, f
 
 void onCommand(CBlob@ this, u8 cmd, CBitStream @params)
 {
+	InfantryInfo@ infantry;
+	if (!this.get( "infantryInfo", @infantry )) return;
+
 	if (cmd == this.getCommandID("shoot bullet"))
 	{
 		if (this is null || this.hasTag("dead")) return;
-		InfantryInfo@ infantry;
-		if (!this.get( "infantryInfo", @infantry )) return;
+		
 		ArcherInfo@ archer;
 		if (!this.get("archerInfo", @archer)) return;
 
@@ -870,10 +872,13 @@ void onCommand(CBlob@ this, u8 cmd, CBitStream @params)
 	{
 		if (isClient())
 		{
-			if (this.getName() == "revolver") onRevolverReload(this);
-			else if (this.getName() == "ranger") onRangerReload(this);
-			else if (this.getName() == "sniper") onSniperReload(this);
-			else if (this.getName() == "mp5") onMp5Reload(this);
+			switch (infantry.class_hash)
+			{
+				case _revolver: onRevolverReload(this); break;
+				case _ranger: 	onRangerReload(this); 	break;
+				case _sniper: 	onSniperReload(this); 	break;
+				case _mp5: 		onMp5Reload(this); 		break;
+			}
 		}
 		if (isServer())
 		{
