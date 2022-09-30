@@ -230,7 +230,7 @@ void onTick(CBlob@ this)
 								{
 									if (!this.hasTag("no_more_shooting")) this.getSprite().PlaySound("Missile_Launch.ogg", 1.25f, 0.95f + XORRandom(15) * 0.01f);
 									
-									ShootBullet(this, barrelPos, aimNorm, 3.0f, targetPos);
+									ShootBullet(this, barrelPos, (aimNorm*3.0f) + thisVel, targetPos);
 									this.Tag("no_more_shooting");
 								}
 							}
@@ -315,11 +315,8 @@ void onTick(CBlob@ this)
 	
 }
 
-void ShootBullet(CBlob @this, Vec2f arrowPos, Vec2f aimpos, f32 arrowspeed, Vec2f targetPos)
+void ShootBullet(CBlob @this, Vec2f arrowPos, Vec2f arrowVel, Vec2f targetPos)
 {
-	Vec2f arrowVel = (aimpos - arrowPos);
-	arrowVel.Normalize();
-	arrowVel *= arrowspeed;
 	CBitStream params;
 	params.write_Vec2f(arrowPos);
 	params.write_Vec2f(arrowVel);
@@ -373,7 +370,7 @@ CBlob@ CreateProj(CBlob@ this, Vec2f arrowPos, Vec2f arrowVel)
 			proj.IgnoreCollisionWhileOverlapped(this);
 			proj.server_setTeamNum(this.getTeamNum());
 			proj.setVelocity(arrowVel);
-			proj.setPosition(arrowPos+Vec2f(0, 12.0f));
+			proj.setPosition(arrowPos);
 		}
 		this.Tag("no_more_proj");
 		return proj;
