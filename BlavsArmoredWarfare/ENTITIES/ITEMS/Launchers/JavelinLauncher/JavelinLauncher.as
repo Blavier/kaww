@@ -21,7 +21,6 @@ void onTick(CBlob@ this)
 	s8 launcherFrame = this.get_s8("launcher_frame");
 	float launcherAngle = this.get_f32("launcher_angle");
 
-	this.setAngleDegrees(launcherAngle);
 	if (is_client) this.getSprite().SetFrame(launcherFrame);
 
 	if (is_dead)
@@ -39,6 +38,10 @@ void onTick(CBlob@ this)
 			this.set_f32("launcher_angle", 0);
 		}
 		return;
+	}
+	else
+	{
+		this.setAngleDegrees(launcherAngle);
 	}
 	
 	AttachmentPoint@ point = this.getAttachments().getAttachmentPointByName("PICKUP");

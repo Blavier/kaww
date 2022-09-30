@@ -157,7 +157,7 @@ void onTick(CBlob@ this)
 	float missileAge = Maths::Min(float(this.getTickSinceCreated()) / 20.0f, 1.0f);
 	missileAge = 2.0f - missileAge;
 	//client UI and sounds
-	makeTargetSquare(targetPos, targetSquareAngle, Vec2f(2.5f, 2.5f)*missileAge, 2.0f, 1.0f, redConsoleColor); //target acquired square
+	makeTargetSquare(targetPos, targetSquareAngle, Vec2f(2.5f, 2.5f)*missileAge, 2.0f*missileAge, 1.0f, redConsoleColor); //target acquired square
 }
 
 void doThrustParticles(Vec2f pPos = Vec2f_zero, Vec2f pVel = Vec2f_zero)
