@@ -1,65 +1,63 @@
+#include "WarfareGlobal.as"
 #include "ComputerCommon.as"
 #include "OrdnanceCommon.as"
 
-const u8 searchRadius = 32.0f;
-
 void onInit(CBlob@ this)
 {
-	LauncherInfo launcher;
-	launcher.progress_speed = 0.04f;
-	this.set("launcherInfo", @launcher);
-	
-	this.set_f32(robotechHeightString, 168.0f); //pixels
+	this.Tag("medium weight");
+	this.Tag("trap"); // so bullets pass
+	this.Tag("hidesgunonhold"); // is it's own weapon
 
-	this.getSprite().SetFrame(2); // no hand
+	this.Tag("ignore_holding");
+
+	this.addCommandID(launchOrdnanceIDString);
 }
 
 void onTick(CBlob@ this)
 {
 	const bool is_client = isClient();
 	const bool is_dead = this.hasTag("dead");
-	s8 launcherFrame = this.get_s8("launcher_frame");
-	float launcherAngle = this.get_f32("launcher_angle");
 
-	if (is_client) this.getSprite().SetFrame(launcherFrame);
-
-	if (is_dead)
-	{
-		this.set_s8("launcher_frame", 3); // no ammo
-		this.set_f32("launcher_angle", 0);
-	}
-
-	if (!this.isAttached())
-	{
-		this.set_f32(robotechHeightString, 68.0f); //resets robotech height
-		if (!is_dead)
-		{
-			this.set_s8("launcher_frame", 2); // not held
-			this.set_f32("launcher_angle", 0);
-		}
-		return;
-	}
-	else
-	{
-		this.setAngleDegrees(launcherAngle);
-	}
+	if (!this.isAttached()) return; // cutoff for performance's sake
 	
 	AttachmentPoint@ point = this.getAttachments().getAttachmentPointByName("PICKUP");
 	if (point is null) return;
 
 	CBlob@ ownerBlob = point.getOccupied();
 	if (ownerBlob is null) return;
+
+	if (isServer())
+	{
+		int ownerTeamNum = ownerBlob.getTeamNum();
+		int teamNum = this.getTeamNum();
+		if (ownerTeamNum != teamNum) this.server_setTeamNum(ownerBlob.getTeamNum());
+	}
 	
+	const bool isFacingLeft = ownerBlob.isFacingLeft();
+	
+	Vec2f thisPos = this.getPosition();
 	Vec2f ownerPos = ownerBlob.getPosition();
 	Vec2f ownerAimpos = ownerBlob.getAimPos() + Vec2f(2.0f, 2.0f);
 
+	Vec2f aimVec = ownerAimpos - thisPos;
+	Vec2f aimNorm = aimVec;
+	aimNorm.Normalize();
+
+	float aimAngle = -aimNorm.getAngleDegrees() + 360.0f;
+	this.setAngleDegrees(isFacingLeft ? aimAngle+180.0f : aimAngle);
+
 	if (!ownerBlob.isMyPlayer() || ownerBlob.isAttached()) return; // only player holding this
 	CControls@ controls = getControls();
-	
+
+	Vec2f barrelPos = Vec2f(isFacingLeft ? -4.0f : 4.0f, isFacingLeft ? 2.0f : -2.0f).RotateByDegrees(aimAngle);
+	Vec2f updatedPos = thisPos+barrelPos;
+	drawParticleLine( updatedPos, updatedPos+(aimNorm*1000.0f), Vec2f_zero, greenConsoleColor, 0, 5.0f); // trajectory
+
 	// binoculars effect
 	ownerBlob.set_u32("dont_change_zoom", getGameTime()+3);
 	ownerBlob.Tag("binoculars");
 
+	/*
 	if (is_dead)
 	{
 		if (controls.isKeyJustPressed(KEY_KEY_R))
@@ -69,123 +67,15 @@ void onTick(CBlob@ this)
 		return;
 	}
 
-	launcherFrame = 2;
-	launcherAngle = ownerBlob.isFacingLeft() ? 30.0f : -30.0f;
-
-	u16 curTargetNetID = this.get_u16(targetNetIDString);
-	float targetingProgress = this.get_f32(targetingProgressString);
-
 	CMap@ map = getMap();
 	if (map == null) return;
 
-	u16[] validBlobIDs; //detectable enemies go here
-	CBlob@[] blobsInRadius;
-	map.getBlobsInRadius(ownerAimpos, searchRadius, @blobsInRadius); //possible enemies in radius
-	for (uint i = 0; i < blobsInRadius.length; i++)
+	if (isClient())
 	{
-		CBlob@ b = blobsInRadius[i];
-		if (b is null)
-		{ continue; }
-
-		if (b.getTeamNum() == ownerBlob.getTeamNum()) //enemy only
-		{ continue; }
-
-		if (!b.hasTag("vehicle")) //vehicles only
-		{ continue; }
-
-		if (b.isAttached()) // non attached blobs
-		{ continue; }
-
-		u16 bNetID = b.getNetworkID();
-		validBlobIDs.push_back(bNetID); //to the pile
+		map.rayCastSolid(barrelPos, barrelPos+aimNorm*500.0f, targetPos) && targetPos != Vec2f_zero)
+		drawParticleLine( robotechPos, targetBlob.getPosition(), Vec2f_zero, greenConsoleColor, 0, 5.0f); // trajectory
 	}
 
-	//get closest to mouse
-	f32 bestDist = 99999.0f;
-	u16 bestBlobNetID = 0;
-	for (uint i = 0; i < validBlobIDs.length; i++)
-	{
-		u16 validNetID = validBlobIDs[i];
-		CBlob@ b = getBlobByNetworkID(validNetID);
-		if (b is null)
-		{ continue; }
-
-		Vec2f targetPos = b.getPosition();
-		Vec2f targetVec = targetPos - ownerAimpos;
-		f32 targetDist = targetVec.getLength();
-
-		if (validNetID == curTargetNetID) 
-		{
-			bestBlobNetID = validNetID;
-			break;
-		}
-		else if (targetDist < bestDist)
-		{
-			bestDist = targetDist;
-			bestBlobNetID = validNetID;
-		}
-	}
-
-	launcherFrame = 0; // grabbed, no green ping
-
-	if (bestBlobNetID != 0) //start locking onto valid target
-	{
-		CBlob@ bestBlob = getBlobByNetworkID(bestBlobNetID);
-		if (bestBlob != null)
-		{
-			Vec2f targetPos = bestBlob.getPosition();
-
-			if (bestBlobNetID != curTargetNetID)
-			{
-				curTargetNetID = bestBlobNetID;
-				this.set_u16(targetNetIDString, bestBlobNetID);
-				targetingProgress = 0.0f;
-			}
-			
-			f32 squareAngle = 45.0f * (1.0f - targetingProgress) * 3;
-			Vec2f squareScale = Vec2f(36.0f, 36.0f) * (2.0f - targetingProgress*1.5);
-			f32 squareCornerSeparation = 4.0f;
-			makeTargetSquare(targetPos, squareAngle, squareScale, squareCornerSeparation, 1.0f, targetingProgress == 1.0f ? redConsoleColor : yellowConsoleColor); //target detected rhombus
-			this.set_f32(targetingProgressString, Maths::Min(targetingProgress+0.01f, 1.0f));
-
-			launcherFrame = 1; // green ping
-			launcherAngle *= 1.55f;
-
-			if (getGameTime() % 11 == 0)
-			{
-				this.getSprite().PlaySound("collect.ogg", 0.8, Maths::Clamp(1.5*targetingProgress, 0.7f, 2.0f));
-			}
-		}
-	}
-	else //resets if no valid targets in range
-	{
-		if (curTargetNetID != 0)
-		{
-			curTargetNetID = 0;
-			this.set_u16(targetNetIDString, 0);
-		}
-	}
-
-	float robotechHeight = this.get_f32(robotechHeightString);
-	if (controls.isKeyJustPressed(MOUSE_SCROLL_DOWN))
-	{
-		robotechHeight += 10.0f;
-
-		this.getSprite().PlaySound("techsound3.ogg", 0.65);
-	}
-	else if (controls.isKeyJustPressed(MOUSE_SCROLL_UP))
-	{
-		robotechHeight -= 10.0f;
-
-		this.getSprite().PlaySound("techsound3.ogg", 0.65, 0.75);
-	}
-
-	robotechHeight = Maths::Clamp(robotechHeight, 18.0f, 118.0f);
-	this.set_f32(robotechHeightString, robotechHeight);
-
-	Vec2f robotechPos = Vec2f(0, -robotechHeight * 2.0f);
-	robotechPos.RotateByDegrees(ownerBlob.isFacingLeft() ? -45.0f : 45.0f); 
-	robotechPos += ownerPos; // join with thispos
 
 	makeTargetSquare(robotechPos, 0, Vec2f(3.0f, 3.0f), 3.0f, 1.0f, greenConsoleColor); // turnpoint
 	
@@ -197,47 +87,15 @@ void onTick(CBlob@ this)
 	else
 	{
 		drawParticleLine( ownerPos - Vec2f(0,2), robotechPos, Vec2f_zero, greenConsoleColor, 0, 5.0f); // trajectory
-		drawParticleLine( robotechPos, targetBlob.getPosition(), Vec2f_zero, greenConsoleColor, 0, 5.0f); // trajectory
-	}
+		
+	}*/
 
 	if (ownerBlob.isKeyJustPressed(key_action1))
 	{
-		if (targetingProgress == 1.0f)
-		{
-			CBitStream params;
-			params.write_u16(curTargetNetID);
-			params.write_f32(robotechHeight);
-			this.SendCommandOnlyServer(this.getCommandID(launchOrdnanceIDString), params);
-
-			this.set_f32(targetingProgressString, 0);
-			this.set_u16(targetNetIDString, 0);
-		}
-		else
-		{
-			this.getSprite().PlaySound("NoAmmo.ogg", 0.55);
-		}
+		this.SendCommand(this.getCommandID(launchOrdnanceIDString));
 	}
 
 	/*
-	if (targetingProgress == 1.0f && ownerBlob.isKeyJustPressed(key_action3))
-	{
-		CInventory@ inv = ownerBlob.getInventory();
-		if (inv !is null && inv.getItem(ammoBlobName) !is null)
-		{
-			CBitStream params;
-			params.write_u16(curTargetNetID);
-			params.write_f32(robotechHeight);
-			this.SendCommandOnlyServer(this.getCommandID(launchOrdnanceIDString), params);
-			this.set_f32(targetingProgressString, 0);
-			this.set_u16(targetNetIDString, 0);
-		}
-		else
-		{
-			this.getSprite().PlaySound("NoAmmo.ogg", 0.55);
-		}
-	}
-	*/
-
 	bool differentAngle = launcherAngle != this.getAngleDegrees();
 	bool differentFrame = launcherFrame != this.get_s8("launcher_frame");
 	
@@ -247,49 +105,56 @@ void onTick(CBlob@ this)
 		params.write_s8(launcherFrame);
 		params.write_f32(launcherAngle);
 		this.SendCommand(this.getCommandID(launcherUpdateStateIDString), params);
-	}
+	}*/
 }
 
 void onCommand(CBlob@ this, u8 cmd, CBitStream @params)
 {
 	if (this == null) return;
-	if (!isServer()) return;
 
 	if (cmd == this.getCommandID(launchOrdnanceIDString))
 	{
 		if (this.hasTag("dead")) return;
 
-		u16 curTargetNetID = 0;
-		float robotechHeight = 64.0f;
+		const bool isFacingLeft = this.isFacingLeft();
+		float thisAngle = this.getAngleDegrees();
+		if (isFacingLeft) thisAngle - 180.0f;
 
-		if (!params.saferead_u16(curTargetNetID)) return;
-		if (!params.saferead_f32(robotechHeight)) return;
-
-		CBlob@ targetBlob = getBlobByNetworkID(curTargetNetID);
-		if (curTargetNetID == 0 || targetBlob == null) return;
-		
-		if (!this.isAttached()) return;
-
-		AttachmentPoint@ point = this.getAttachments().getAttachmentPointByName("PICKUP");
-		if (point is null) return;
-
-		CBlob@ ownerBlob = point.getOccupied();
-		if (ownerBlob is null) return;
-
-		Vec2f launchVec = Vec2f(ownerBlob.isFacingLeft() ? -1 : 1, -1.05f);
+		Vec2f barrelPos = Vec2f(isFacingLeft ? -4.0f : 4.0f, -2.0f).RotateByDegrees(thisAngle);
+		Vec2f launchVec = Vec2f(isFacingLeft ? -1.0f : 1.0f, 0).RotateByDegrees(thisAngle);
 		Vec2f thisPos = this.getPosition();
 
-		CBlob@ blob = server_CreateBlob("missile_javelin", ownerBlob.getTeamNum(), thisPos - Vec2f(0,3));
-		if (blob != null)
+		u16 playerNetID = 0;
+		if (this.isAttached())
 		{
-			blob.setVelocity(launchVec * 3.0f);
-			blob.IgnoreCollisionWhileOverlapped(this, 20);
+			AttachmentPoint@ point = this.getAttachments().getAttachmentPointByName("PICKUP");
+			if (point is null) return;
 
-			blob.SetDamageOwnerPlayer(ownerBlob.getPlayer()); 
-			blob.set_u16(targetNetIDString, curTargetNetID);
-			blob.set_f32(robotechHeightString, thisPos.y - robotechHeight);
+			CBlob@ ownerBlob = point.getOccupied();
+			if (ownerBlob is null) return;
+
+			ownerBlob.setVelocity(ownerBlob.getVelocity() - (launchVec*5.0f));
+
+			CPlayer@ player = ownerBlob.getPlayer();
+			if (player != null) playerNetID = player.getNetworkID();
 		}
 
-		launcherSetDeath(this, true); // set dead
+		if (isServer())
+		{
+			CBlob@ blob = server_CreateBlob("bulletheavy", this.getTeamNum(), thisPos + barrelPos);
+			if (blob != null)
+			{
+				blob.setVelocity(launchVec*50.0f);
+				blob.IgnoreCollisionWhileOverlapped(this);
+
+				if (playerNetID != 0) blob.SetDamageOwnerPlayer(getPlayerByNetworkId(playerNetID));
+
+				blob.set_f32("bullet_damage_body", 10.0f);
+				blob.set_f32("bullet_damage_head", 12.0f);
+				blob.set_s8(penRatingString, 4);
+			}
+		}
+
+		//launcherSetDeath(this, true); // set dead
 	}
 }

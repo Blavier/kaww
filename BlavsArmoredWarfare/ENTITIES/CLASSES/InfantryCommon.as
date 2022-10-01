@@ -716,7 +716,7 @@ CBlob@ CreateBulletProj( CBlob@ this, Vec2f arrowPos, Vec2f arrowVel,
 		proj.server_setTeamNum(this.getTeamNum());
 		proj.setPosition(arrowPos);
 		proj.setVelocity(arrowVel);
-		proj.set_s8(penRatingString, penRating); // buckshot isn't exactly known for its effectivness against tanks...
+		proj.set_s8(penRatingString, penRating);
 	}
 	return proj;
 }
